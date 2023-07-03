@@ -3,12 +3,12 @@ package kube
 import "errors"
 
 var (
-	// errInvalidKubeClient is returned when the kube client is invalid.
-	errInvalidKubeConfig = errors.New("invalid kube client")
+	// ErrInvalidKubeConfig is returned when the kube client is invalid.
+	ErrInvalidKubeConfig = errors.New("invalid kube config")
 
-	// errInvalidKubeConfig is returned when the kube config is invalid.
-	errMissingKubeConfig = errors.New("running outside of cluster and kubeconfig flag is not set")
+	// ErrMissingKubeConfig is returned when the kube config is invalid.
+	ErrMissingKubeConfig = errors.New("running outside of cluster and kubeconfig flag is not set")
 
-	// errInvalidKubeClient is returned when the kube client is invalid.
-	errInvalidKubeClient = errors.New("invalid kube client")
+	// ErrInvalidKubeClient is returned when the kube client is invalid.
+	ErrInvalidKubeClient = errors.New("invalid kube client")
 )

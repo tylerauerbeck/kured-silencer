@@ -8,6 +8,7 @@ import (
 
 	runtimeclient "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
 	"github.com/tylerauerbeck/kured-silencer/pkg/internal/utils"
 
 	"github.com/prometheus/alertmanager/api/v2/client"
@@ -15,13 +16,15 @@ import (
 	"github.com/prometheus/alertmanager/api/v2/models"
 )
 
-func NewSilencerClient(u *url.URL) *client.AlertmanagerAPI {
+// NewSilencerClient returns a new alertmanager client pointed at the specified url
+func NewSilencerClient(_ context.Context, u *url.URL) *client.AlertmanagerAPI {
 	return client.New(
 		runtimeclient.New(u.Host, path.Join(u.Path, "/api/v2"), []string{u.Scheme}),
 		strfmt.Default,
 	)
 }
 
+// PostSilence creates a new silence for all warning and critical alerts
 func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time.Duration) (string, error) {
 	// TODO: allow for defining matchers?
 	ms := []*models.Matcher{
@@ -60,6 +63,7 @@ func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time
 	return id.Payload.SilenceID, nil
 }
 
+// DeleteSilence deletes the silence with the specified id
 func DeleteSilence(ctx context.Context, cli *client.AlertmanagerAPI, id string) error {
 	params := silence.NewDeleteSilenceParamsWithContext(ctx).
 		WithSilenceID(strfmt.UUID(id))
