@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/go-openapi/strfmt"
+
 	"github.com/stretchr/testify/assert"
+
 	"github.com/tylerauerbeck/kured-silencer/pkg/internal/utils"
 )
 
