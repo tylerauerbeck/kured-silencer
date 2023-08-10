@@ -44,7 +44,7 @@ func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time
 		WithSilence(&models.PostableSilence{
 			Silence: models.Silence{
 				StartsAt:  utils.NewDateTime(strfmt.DateTime(time.Now())),
-				EndsAt:    utils.NewDateTime(strfmt.DateTime(time.Now().Add(duration * time.Minute))),
+				EndsAt:    utils.NewDateTime(strfmt.DateTime(time.Now().Add(duration))),
 				Comment:   utils.NewString("silenced for kured reboot"),
 				CreatedBy: utils.NewString("kured-silencer"),
 				Matchers:  ms,
