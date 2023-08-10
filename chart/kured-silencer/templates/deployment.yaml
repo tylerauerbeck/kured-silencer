@@ -1,0 +1,86 @@
+---
+apiVersion: {{ include "common.capabilities.deployment.apiVersion" . }}
+kind: Deployment
+metadata:
+  name: {{ template "common.names.fullname" . }}
+  labels:
+    {{- include "common.labels.standard" . | nindent 4 }}
+    {{- if .Values.silencer.extraLabels }}
+    {{- toYaml .Values.silencer.extraLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.silencer.extraAnnotations }}
+  annotations:
+    {{- toYaml .Values.silencer.extraAnnotations | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.silencer.replicas | default 1 }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+      {{- include "common.labels.standard" . | nindent 8 }}
+      {{- if .Values.silencer.extraLabels }}
+      {{- toYaml .Values.silencer.extraLabels | nindent 8 }}
+      {{- end }}
+      {{- if .Values.silencer.extraAnnotations }}
+      annotations:
+        {{- toYaml .Values.silencer.extraAnnotations | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.silencer.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.silencer.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.silencer.podSecurityContext | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- if .Values.silencer.extraEnvVars }}
+          env:
+          {{- range .Values.silencer.extraEnvVars }}
+            - name: {{ .name }}
+              value: {{ .value }}
+          {{- end }}
+          {{- end }}
+          {{- with .Values.silencer.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            - --alertmanager-endpoint={{ .Values.silencer.alertmanagerEndpoint }}
+            - --kured-label={{ .Values.silencer.kuredLabel }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.silencer.listenPort | default "8080" }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {{- toYaml .Values.silencer.resources | nindent 12 }}
+          serviceAccountName: {{ template "common.names.fullname" . }}
+      {{- with .Values.silencer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.silencer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.silencer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
