@@ -30,6 +30,15 @@ jobs:
           tags: |
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: "go.mod"
+      - name: Build
+        run: |
+          go build .
+
       - name: Build+Push
         uses: docker/build-push-action@v4
         with:
