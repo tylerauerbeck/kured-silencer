@@ -3,8 +3,8 @@
 # Declare variables to be passed into your templates.
 
 image:
-  repository: quay.io/tauerbeck/kured-silencer
-  pullPolicy: IfNotPresent
+  repository: ghcr.io/tylerauerbeck/kured-silencer
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
