@@ -52,7 +52,8 @@ func serve(ctx context.Context) {
 		logger.Fatalw("error creating node watcher", "error", err)
 	}
 
-	if err := srv.Run(ctx, watcher); err != nil {
-		logger.Fatalw("error running server", "error", err)
-	}
+	// if err := srv.Run(ctx, watcher); err != nil {
+	// 	logger.Fatalw("error running server", "error", err)
+	// }
+	srv.Run(ctx, watcher)
 }

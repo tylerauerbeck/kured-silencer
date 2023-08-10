@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/spf13/viper"
@@ -13,12 +14,18 @@ import (
 	"go.uber.org/zap"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 var (
-	silenceIDs = make(map[string]string)
+	silenceIDs           = make(map[string]string)
+	defaultLeaseDuration = 15 * time.Second
+	defaultRenewDeadline = 10 * time.Second
+	defaultRetryPeriod   = 2 * time.Second
 )
 
 // NewServer creates a new server
@@ -110,14 +117,23 @@ func (srv Server) EventHandler(ctx context.Context, event watch.Event) error {
 }
 
 // Run starts the server
-func (srv *Server) Run(ctx context.Context, watcher watch.Interface) error {
-	for event := range watcher.ResultChan() {
-		if err := srv.EventHandler(ctx, event); err != nil {
-			return err
+func (srv *Server) Run(ctx context.Context, watcher watch.Interface) {
+	if viper.GetString("kubeconfig-path") == "" {
+		client := srv.GetKubeClient().(*kubernetes.Clientset)
+		lock := getLock(client, "kured-silencer", os.Getenv("POD_NAME"), os.Getenv("POD_NAMESPACE"))
+		srv.runLeaderElection(ctx, watcher, lock, os.Getenv("POD_NAME"))
+	} else {
+		if err := srv.WatcherRun(ctx, watcher); err != nil {
+			panic(err)
 		}
 	}
+	// for event := range watcher.ResultChan() {
+	// 	if err := srv.EventHandler(ctx, event); err != nil {
+	// 		return err
+	// 	}
+	// }
 
-	return nil
+	// return nil
 }
 
 // ValidateURL ensures that a valid url with both scheme and host is provided
@@ -128,6 +144,54 @@ func ValidateURL(u *url.URL) error {
 
 	if u.Host == "" {
 		return ErrMissingHost
+	}
+
+	return nil
+}
+
+func getLock(client *kubernetes.Clientset, lockname string, podname string, namespace string) *resourcelock.LeaseLock {
+	return &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{
+			Name:      lockname,
+			Namespace: namespace,
+		},
+		Client: client.CoordinationV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: podname,
+		},
+	}
+}
+
+func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interface, lock *resourcelock.LeaseLock, id string) {
+	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
+		Lock:            lock,
+		ReleaseOnCancel: true,
+		LeaseDuration:   defaultLeaseDuration,
+		RenewDeadline:   defaultRenewDeadline,
+		RetryPeriod:     defaultRetryPeriod,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(c context.Context) {
+				srv.WatcherRun(ctx, watcher)
+			},
+			OnStoppedLeading: func() {
+				srv.logger.Info("new leader elected, stepping down...")
+			},
+			OnNewLeader: func(current_id string) {
+				if current_id == id {
+					srv.logger.Debug("re-elected as leader, continuing...")
+					return
+				}
+				srv.logger.Infow("new leader elected", "leader", current_id)
+			},
+		},
+	})
+}
+
+func (srv *Server) WatcherRun(ctx context.Context, watcher watch.Interface) error {
+	for event := range watcher.ResultChan() {
+		if err := srv.EventHandler(ctx, event); err != nil {
+			return err
+		}
 	}
 
 	return nil
