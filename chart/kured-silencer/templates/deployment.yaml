@@ -58,18 +58,18 @@ spec:
             - --alertmanager-endpoint={{ .Values.silencer.alertmanagerEndpoint }}
             - --kured-label={{ .Values.silencer.kuredLabel }}
             - --silence-duration={{ .Values.silencer.silenceDuration }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.silencer.listenPort | default "8080" }}
-              protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /livez
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: http
+          # ports:
+          #   - name: http
+          #     containerPort: {{ .Values.silencer.listenPort | default "8080" }}
+          #     protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
           resources:
             {{- toYaml .Values.silencer.resources | nindent 12 }}
       {{- with .Values.silencer.nodeSelector }}
