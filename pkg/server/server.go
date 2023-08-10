@@ -26,6 +26,9 @@ var (
 	defaultLeaseDuration = 15 * time.Second
 	defaultRenewDeadline = 10 * time.Second
 	defaultRetryPeriod   = 2 * time.Second
+	leaseLockName        = "kured-silencer"
+	leaseLockNamespace   = os.Getenv("POD_NAMESPACE")
+	podName              = os.Getenv("POD_NAME")
 )
 
 // NewServer creates a new server
@@ -120,20 +123,14 @@ func (srv Server) EventHandler(ctx context.Context, event watch.Event) error {
 func (srv *Server) Run(ctx context.Context, watcher watch.Interface) {
 	if viper.GetString("kubeconfig-path") == "" {
 		client := srv.GetKubeClient().(*kubernetes.Clientset)
-		lock := getLock(client, "kured-silencer", os.Getenv("POD_NAME"), os.Getenv("POD_NAMESPACE"))
+		// lock := getNewLock(client, "kured-silencer", os.Getenv("POD_NAME"), os.Getenv("POD_NAMESPACE"))
+		lock := getNewLock(client, leaseLockName, podName, leaseLockNamespace)
 		srv.runLeaderElection(ctx, watcher, lock, os.Getenv("POD_NAME"))
 	} else {
 		if err := srv.WatcherRun(ctx, watcher); err != nil {
 			panic(err)
 		}
 	}
-	// for event := range watcher.ResultChan() {
-	// 	if err := srv.EventHandler(ctx, event); err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	// return nil
 }
 
 // ValidateURL ensures that a valid url with both scheme and host is provided
@@ -149,7 +146,20 @@ func ValidateURL(u *url.URL) error {
 	return nil
 }
 
-func getLock(client *kubernetes.Clientset, lockname string, podname string, namespace string) *resourcelock.LeaseLock {
+// func getLock(client *kubernetes.Clientset, lockname string, podname string, namespace string) *resourcelock.LeaseLock {
+// 	return &resourcelock.LeaseLock{
+// 		LeaseMeta: metav1.ObjectMeta{
+// 			Name:      lockname,
+// 			Namespace: namespace,
+// 		},
+// 		Client: client.CoordinationV1(),
+// 		LockConfig: resourcelock.ResourceLockConfig{
+// 			Identity: podname,
+// 		},
+// 	}
+// }
+
+func getNewLock(client *kubernetes.Clientset, lockname, podname, namespace string) *resourcelock.LeaseLock {
 	return &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
 			Name:      lockname,
@@ -171,7 +181,9 @@ func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interfac
 		RetryPeriod:     defaultRetryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(c context.Context) {
-				srv.WatcherRun(ctx, watcher)
+				if err := srv.WatcherRun(ctx, watcher); err != nil {
+					panic(err)
+				}
 			},
 			OnStoppedLeading: func() {
 				srv.logger.Info("new leader elected, stepping down...")
