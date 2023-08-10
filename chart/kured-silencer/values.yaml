@@ -68,5 +68,7 @@ silencer:
   # runAsNonRoot: true
   # runAsUser: 1000
 
+  silenceDuration: "10m"
+
   tolerations: []
   

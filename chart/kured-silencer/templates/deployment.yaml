@@ -29,6 +29,7 @@ spec:
         {{- toYaml .Values.silencer.extraAnnotations | nindent 8 }}
       {{- end }}
     spec:
+      serviceAccountName: {{ template "common.names.fullname" . }}
       {{- with .Values.silencer.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -56,6 +57,7 @@ spec:
             - serve
             - --alertmanager-endpoint={{ .Values.silencer.alertmanagerEndpoint }}
             - --kured-label={{ .Values.silencer.kuredLabel }}
+            - --silence-duration={{ .Values.silencer.silenceDuration }}
           ports:
             - name: http
               containerPort: {{ .Values.silencer.listenPort | default "8080" }}
@@ -70,7 +72,6 @@ spec:
               port: http
           resources:
             {{- toYaml .Values.silencer.resources | nindent 12 }}
-          serviceAccountName: {{ template "common.names.fullname" . }}
       {{- with .Values.silencer.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
