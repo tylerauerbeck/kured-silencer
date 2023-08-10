@@ -39,14 +39,14 @@ silencer:
   
   imagePullSecrets: []
 
-  kuredAnnotation: "silence=true"
+  kuredLabel: "silence=true"
 
   nodeSelector: {}
   
   podSecurityContext: {}
   # fsGroup: 2000
   
-  replicas: 1
+  replicas: 2
   
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
