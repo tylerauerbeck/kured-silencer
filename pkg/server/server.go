@@ -23,7 +23,7 @@ import (
 
 var (
 	silenceIDs            = make(map[string][]string)
-	defaultWatcherRefresh = 2 * time.Minute
+	defaultWatcherRefresh = 25 * time.Minute
 	defaultLeaseDuration  = 15 * time.Second
 	defaultRenewDeadline  = 10 * time.Second
 	defaultRetryPeriod    = 2 * time.Second
