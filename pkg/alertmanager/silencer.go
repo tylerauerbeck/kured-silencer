@@ -25,18 +25,15 @@ func NewSilencerClient(_ context.Context, u *url.URL) *client.AlertmanagerAPI {
 }
 
 // PostSilence creates a new silence for all warning and critical alerts
-func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time.Duration) (string, error) {
-	// TODO: allow for defining matchers?
-	ms := []*models.Matcher{
+func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time.Duration) ([]string, error) {
+	// TODO: allow for defining custom matchers?
+	ids := []string{}
+
+	warning := []*models.Matcher{
 		{
 			IsRegex: utils.NewBool(true),
 			Name:    utils.NewString("severity"),
 			Value:   utils.NewString("warning"),
-		},
-		{
-			IsRegex: utils.NewBool(true),
-			Name:    utils.NewString("severity"),
-			Value:   utils.NewString("critical"),
 		},
 	}
 
@@ -47,7 +44,33 @@ func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time
 				EndsAt:    utils.NewDateTime(strfmt.DateTime(time.Now().Add(duration))),
 				Comment:   utils.NewString("silenced for kured reboot"),
 				CreatedBy: utils.NewString("kured-silencer"),
-				Matchers:  ms,
+				Matchers:  warning,
+			},
+		})
+
+	id, err := cli.Silence.PostSilences(params)
+	if err != nil {
+		return ids, err
+	}
+
+	ids = append(ids, id.Payload.SilenceID)
+
+	critical := []*models.Matcher{
+		{
+			IsRegex: utils.NewBool(true),
+			Name:    utils.NewString("severity"),
+			Value:   utils.NewString("critical"),
+		},
+	}
+
+	params = silence.NewPostSilencesParamsWithContext(ctx).
+		WithSilence(&models.PostableSilence{
+			Silence: models.Silence{
+				StartsAt:  utils.NewDateTime(strfmt.DateTime(time.Now())),
+				EndsAt:    utils.NewDateTime(strfmt.DateTime(time.Now().Add(duration))),
+				Comment:   utils.NewString("silenced for kured reboot"),
+				CreatedBy: utils.NewString("kured-silencer"),
+				Matchers:  critical,
 			},
 		})
 
@@ -55,12 +78,14 @@ func PostSilence(ctx context.Context, cli *client.AlertmanagerAPI, duration time
 
 	// TODO: lets not add another silencer if there is already one in place
 
-	id, err := cli.Silence.PostSilences(params)
+	id, err = cli.Silence.PostSilences(params)
 	if err != nil {
-		return "", err
+		return ids, err
 	}
 
-	return id.Payload.SilenceID, nil
+	ids = append(ids, id.Payload.SilenceID)
+
+	return ids, nil
 }
 
 // DeleteSilence deletes the silence with the specified id

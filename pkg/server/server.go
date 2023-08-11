@@ -22,13 +22,14 @@ import (
 )
 
 var (
-	silenceIDs           = make(map[string]string)
-	defaultLeaseDuration = 15 * time.Second
-	defaultRenewDeadline = 10 * time.Second
-	defaultRetryPeriod   = 2 * time.Second
-	leaseLockName        = "kured-silencer"
-	leaseLockNamespace   = os.Getenv("POD_NAMESPACE")
-	podName              = os.Getenv("POD_NAME")
+	silenceIDs            = make(map[string][]string)
+	defaultWatcherRefresh = 2 * time.Minute
+	defaultLeaseDuration  = 15 * time.Second
+	defaultRenewDeadline  = 10 * time.Second
+	defaultRetryPeriod    = 2 * time.Second
+	leaseLockName         = "kured-silencer"
+	leaseLockNamespace    = os.Getenv("POD_NAMESPACE")
+	podName               = os.Getenv("POD_NAME")
 )
 
 // NewServer creates a new server
@@ -61,11 +62,6 @@ func NewServer(ctx context.Context, logger *zap.SugaredLogger) (*Server, error) 
 	return srv, nil
 }
 
-// func (srv Server) setSilencedID(s string) Server {
-// 	srv.silencedID = s //nolint:staticcheck
-// 	return srv
-// }
-
 // WithLogger sets the logger for the server
 func (srv Server) WithLogger(_ context.Context, logger *zap.SugaredLogger) *Server {
 	srv.logger = logger
@@ -87,23 +83,32 @@ func (srv Server) GetKubeClient() kubernetes.Interface {
 func (srv Server) EventHandler(ctx context.Context, event watch.Event) error {
 	switch event.Type {
 	case watch.Added:
-		silencedID, err := alertmanager.PostSilence(ctx, srv.Client.AMClient, srv.silenceDuration)
+		silencedIDs, err := alertmanager.PostSilence(ctx, srv.Client.AMClient, srv.silenceDuration)
 		if err != nil {
-			// TODO: have something that triggers a check to see if the node is still labeled
-			// after silencer expiration
+			if len(silencedIDs) > 0 {
+				for _, id := range silencedIDs {
+					if err := alertmanager.DeleteSilence(ctx, srv.Client.AMClient, id); err != nil {
+						return err
+					}
+				}
+			}
+
 			return err
 		}
 
-		silenceIDs[event.Object.(*v1.Node).Name] = silencedID
+		silenceIDs[event.Object.(*v1.Node).Name] = silencedIDs
 
 		srv.logger.Infow("label added", "node", event.Object.(*v1.Node).Name)
 
 		return nil
 	case watch.Deleted:
-		id, ok := silenceIDs[event.Object.(*v1.Node).Name]
+		ids, ok := silenceIDs[event.Object.(*v1.Node).Name]
 		if ok {
-			if err := alertmanager.DeleteSilence(ctx, srv.Client.AMClient, id); err != nil {
-				return err
+			for _, id := range ids {
+				if err := alertmanager.DeleteSilence(ctx, srv.Client.AMClient, id); err != nil {
+					// TODO: emit metric that we failed to delete a set of silences
+					return err
+				}
 			}
 
 			delete(silenceIDs, event.Object.(*v1.Node).Name)
@@ -127,8 +132,10 @@ func (srv *Server) Run(ctx context.Context, watcher watch.Interface) {
 		lock := getNewLock(client, leaseLockName, podName, leaseLockNamespace)
 		srv.runLeaderElection(ctx, watcher, lock, os.Getenv("POD_NAME"))
 	} else {
-		if err := srv.WatcherRun(ctx, watcher); err != nil {
-			panic(err)
+		for {
+			if err := srv.watcherRun(ctx, watcher); err != nil {
+				srv.logger.Info(err.Error())
+			}
 		}
 	}
 }
@@ -145,19 +152,6 @@ func ValidateURL(u *url.URL) error {
 
 	return nil
 }
-
-// func getLock(client *kubernetes.Clientset, lockname string, podname string, namespace string) *resourcelock.LeaseLock {
-// 	return &resourcelock.LeaseLock{
-// 		LeaseMeta: metav1.ObjectMeta{
-// 			Name:      lockname,
-// 			Namespace: namespace,
-// 		},
-// 		Client: client.CoordinationV1(),
-// 		LockConfig: resourcelock.ResourceLockConfig{
-// 			Identity: podname,
-// 		},
-// 	}
-// }
 
 func getNewLock(client *kubernetes.Clientset, lockname, podname, namespace string) *resourcelock.LeaseLock {
 	return &resourcelock.LeaseLock{
@@ -181,8 +175,13 @@ func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interfac
 		RetryPeriod:     defaultRetryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(c context.Context) {
-				if err := srv.WatcherRun(ctx, watcher); err != nil {
-					panic(err)
+				// if err := srv.watcherRun(ctx, watcher); err != nil {
+				// 	panic(err)
+				// }
+				for {
+					if err := srv.watcherRun(ctx, watcher); err != nil {
+						srv.logger.Info("Watcher closed", "error", err.Error())
+					}
 				}
 			},
 			OnStoppedLeading: func() {
@@ -199,12 +198,21 @@ func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interfac
 	})
 }
 
-func (srv *Server) WatcherRun(ctx context.Context, watcher watch.Interface) error {
-	for event := range watcher.ResultChan() {
-		if err := srv.EventHandler(ctx, event); err != nil {
-			return err
+func (srv *Server) watcherRun(ctx context.Context, watcher watch.Interface) error {
+	for {
+		select {
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				srv.logger.Info("watcher channel closed, restarting...")
+				return nil
+			}
+
+			if err := srv.EventHandler(ctx, event); err != nil {
+				return err
+			}
+		case <-time.After(defaultWatcherRefresh):
+			srv.logger.Info("refreshing watcher...")
+			return nil
 		}
 	}
-
-	return nil
 }
