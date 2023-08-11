@@ -29,6 +29,7 @@ spec:
         {{- toYaml .Values.silencer.extraAnnotations | nindent 8 }}
       {{- end }}
     spec:
+      automountServiceAccountToken: true
       serviceAccountName: {{ template "common.names.fullname" . }}
       {{- with .Values.silencer.imagePullSecrets }}
       imagePullSecrets:
