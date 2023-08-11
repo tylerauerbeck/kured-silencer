@@ -20,6 +20,7 @@ type Server struct {
 	// kubeClient      *kubernetes.Interface
 	// amClient        *client.AlertmanagerAPI
 	logger          *zap.SugaredLogger
+	removalBuffer   time.Duration
 	silenceDuration time.Duration
 
 	// silencedID string

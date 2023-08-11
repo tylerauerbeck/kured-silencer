@@ -57,6 +57,7 @@ func NewServer(ctx context.Context, logger *zap.SugaredLogger) (*Server, error) 
 		},
 		logger:          logger,
 		silenceDuration: viper.GetDuration("silence-duration"),
+		removalBuffer:   viper.GetDuration("removal-buffer"),
 	}
 
 	return srv, nil
@@ -102,6 +103,13 @@ func (srv Server) EventHandler(ctx context.Context, event watch.Event) error {
 
 		return nil
 	case watch.Deleted:
+		// TODO: probably a better way to do this, but we're finding that we get alerted once
+		// the silence is removed because there are alerts that haven't cleared. This is a
+		// configurable period of time, but it would be better to have a smarter way to handle
+		// this
+
+		time.Sleep(srv.removalBuffer)
+
 		ids, ok := silenceIDs[event.Object.(*v1.Node).Name]
 		if ok {
 			for _, id := range ids {

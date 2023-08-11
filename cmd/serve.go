@@ -35,6 +35,9 @@ func init() {
 	serveCmd.Flags().String("alertmanager-endpoint", "", "Alertmanager endpoint to send silences to")
 	viperBindFlag("alertmanager-endpoint", serveCmd.Flags().Lookup("alertmanager-endpoint"))
 
+	serveCmd.Flags().Duration("removal-buffer", time.Duration(1*time.Minute), "buffer time before removing a silence from a node")
+	viperBindFlag("removal-buffer", serveCmd.Flags().Lookup("removal-buffer"))
+
 	serveCmd.Flags().Duration("silence-duration", time.Duration(defaultDuration), "silence duration in minutes")
 	viperBindFlag("silence-duration", serveCmd.Flags().Lookup("silence-duration"))
 }
