@@ -11,6 +11,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+var (
+	timeoutSeconds = int64(600)
+)
+
 // NewKubeClient returns a new kubernetes clientset
 func NewKubeClient(_ context.Context, path string) (*kubernetes.Clientset, error) {
 	config, err := rest.InClusterConfig()
@@ -38,7 +42,7 @@ func NewNodeWatcher(ctx context.Context, cli kubernetes.Interface, label string)
 	// TODO: add bookmarker here so that it's not picking up old labels
 	// This is particularly important if it just keeps failing and sees
 	// an existing label and then just adds another new silencer
-	watcher, err := cli.CoreV1().Nodes().Watch(ctx, metav1.ListOptions{LabelSelector: label})
+	watcher, err := cli.CoreV1().Nodes().Watch(ctx, metav1.ListOptions{LabelSelector: label, TimeoutSeconds: &timeoutSeconds})
 	if err != nil {
 		// TODO: errInvalidWatcher
 		return nil, err
