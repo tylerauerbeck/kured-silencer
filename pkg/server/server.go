@@ -22,14 +22,13 @@ import (
 )
 
 var (
-	silenceIDs            = make(map[string][]string)
-	defaultWatcherRefresh = 1 * time.Minute
-	defaultLeaseDuration  = 15 * time.Second
-	defaultRenewDeadline  = 10 * time.Second
-	defaultRetryPeriod    = 2 * time.Second
-	leaseLockName         = "kured-silencer"
-	leaseLockNamespace    = os.Getenv("POD_NAMESPACE")
-	podName               = os.Getenv("POD_NAME")
+	silenceIDs           = make(map[string][]string)
+	defaultLeaseDuration = 15 * time.Second
+	defaultRenewDeadline = 10 * time.Second
+	defaultRetryPeriod   = 2 * time.Second
+	leaseLockName        = "kured-silencer"
+	leaseLockNamespace   = os.Getenv("POD_NAMESPACE")
+	podName              = os.Getenv("POD_NAME")
 )
 
 // NewServer creates a new server
@@ -143,7 +142,6 @@ func (srv *Server) Run(ctx context.Context) {
 			if err := srv.watcherRun(ctx); err != nil {
 				srv.logger.Infow("restarting watcher...", "error", err.Error())
 			}
-
 		}
 	}
 }
@@ -215,6 +213,7 @@ func (srv *Server) watcherRun(ctx context.Context) error {
 		case event, ok := <-watcher.ResultChan():
 			if !ok {
 				srv.logger.Info("refreshing watcher...")
+				watcher.Stop()
 				if watcher, err = kube.NewNodeWatcher(ctx, srv.GetKubeClient(), viper.GetString("kured-label")); err != nil {
 					return err
 				}
