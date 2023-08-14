@@ -23,7 +23,7 @@ import (
 
 var (
 	silenceIDs            = make(map[string][]string)
-	defaultWatcherRefresh = 25 * time.Minute
+	defaultWatcherRefresh = 1 * time.Minute
 	defaultLeaseDuration  = 15 * time.Second
 	defaultRenewDeadline  = 10 * time.Second
 	defaultRetryPeriod    = 2 * time.Second
@@ -133,17 +133,17 @@ func (srv Server) EventHandler(ctx context.Context, event watch.Event) error {
 }
 
 // Run starts the server
-func (srv *Server) Run(ctx context.Context, watcher watch.Interface) {
+func (srv *Server) Run(ctx context.Context) {
 	if viper.GetString("kubeconfig-path") == "" {
 		client := srv.GetKubeClient().(*kubernetes.Clientset)
-		// lock := getNewLock(client, "kured-silencer", os.Getenv("POD_NAME"), os.Getenv("POD_NAMESPACE"))
 		lock := getNewLock(client, leaseLockName, podName, leaseLockNamespace)
-		srv.runLeaderElection(ctx, watcher, lock, os.Getenv("POD_NAME"))
+		srv.runLeaderElection(ctx, lock, os.Getenv("POD_NAME"))
 	} else {
 		for {
-			if err := srv.watcherRun(ctx, watcher); err != nil {
-				srv.logger.Info(err.Error())
+			if err := srv.watcherRun(ctx); err != nil {
+				srv.logger.Infow("restarting watcher...", "error", err.Error())
 			}
+
 		}
 	}
 }
@@ -174,7 +174,7 @@ func getNewLock(client *kubernetes.Clientset, lockname, podname, namespace strin
 	}
 }
 
-func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interface, lock *resourcelock.LeaseLock, id string) {
+func (srv *Server) runLeaderElection(ctx context.Context, lock *resourcelock.LeaseLock, id string) {
 	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 		Lock:            lock,
 		ReleaseOnCancel: true,
@@ -183,11 +183,8 @@ func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interfac
 		RetryPeriod:     defaultRetryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(c context.Context) {
-				// if err := srv.watcherRun(ctx, watcher); err != nil {
-				// 	panic(err)
-				// }
 				for {
-					if err := srv.watcherRun(ctx, watcher); err != nil {
+					if err := srv.watcherRun(ctx); err != nil {
 						srv.logger.Info("Watcher closed", "error", err.Error())
 					}
 				}
@@ -206,21 +203,26 @@ func (srv *Server) runLeaderElection(ctx context.Context, watcher watch.Interfac
 	})
 }
 
-func (srv *Server) watcherRun(ctx context.Context, watcher watch.Interface) error {
+func (srv *Server) watcherRun(ctx context.Context) error {
+
+	watcher, err := kube.NewNodeWatcher(ctx, srv.GetKubeClient(), viper.GetString("kured-label"))
+	if err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case event, ok := <-watcher.ResultChan():
 			if !ok {
-				srv.logger.Info("watcher channel closed, restarting...")
-				return nil
+				srv.logger.Info("refreshing watcher...")
+				if watcher, err = kube.NewNodeWatcher(ctx, srv.GetKubeClient(), viper.GetString("kured-label")); err != nil {
+					return err
+				}
+
+				continue
 			}
 
-			if err := srv.EventHandler(ctx, event); err != nil {
-				return err
-			}
-		case <-time.After(defaultWatcherRefresh):
-			srv.logger.Info("refreshing watcher...")
-			return nil
+			srv.EventHandler(ctx, event)
 		}
 	}
 }
