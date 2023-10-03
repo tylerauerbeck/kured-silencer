@@ -83,6 +83,11 @@ func (srv Server) GetKubeClient() kubernetes.Interface {
 func (srv Server) EventHandler(ctx context.Context, event watch.Event) error {
 	switch event.Type {
 	case watch.Added:
+		if err := isNodeReady(event.Object.(*v1.Node)); err != nil {
+			srv.logger.Errorw("node not ready", "node", event.Object.(*v1.Node).Name)
+			return err
+		}
+
 		silencedIDs, err := alertmanager.PostSilence(ctx, srv.Client.AMClient, srv.silenceDuration)
 		if err != nil {
 			if len(silencedIDs) > 0 {
@@ -224,4 +229,18 @@ func (srv *Server) watcherRun(ctx context.Context) error {
 			srv.EventHandler(ctx, event)
 		}
 	}
+}
+
+func isNodeReady(node *v1.Node) error {
+
+	if node.Spec.Unschedulable {
+		return ErrNodeUnschedulable
+	}
+
+	for _, c := range node.Status.Conditions {
+		if c.Type == v1.NodeReady {
+			return nil
+		}
+	}
+	return ErrNodeNotReady
 }
