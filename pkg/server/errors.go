@@ -14,4 +14,10 @@ var (
 
 	// ErrMissingNode is returned when the node a label is deleted from is not found
 	ErrMissingNode = errors.New("missing node")
+
+	// ErrNodeNotReady is returned when the node is not ready
+	ErrNodeNotReady = errors.New("node not ready")
+
+	// ErrNodeUnschedulable is returned when the node is unschedulable
+	ErrNodeUnschedulable = errors.New("node unschedulable")
 )
